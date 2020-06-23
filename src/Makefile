@@ -10,6 +10,7 @@
 #    PLATFORM_ANDROID:  Android (ARM, ARM64)
 #    PLATFORM_RPI:      Raspberry Pi (Raspbian)
 #    PLATFORM_WEB:      HTML5 (Chrome, Firefox)
+#    PLATFORM_3DS:      Nintendo 3DS
 #
 #  Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
 #  Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
@@ -50,8 +51,8 @@ RAYLIB_PATH        = ..
 
 # Define default options
 
-# One of PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
-PLATFORM             ?= PLATFORM_DESKTOP
+# One of PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB, PLATFORM_3DS
+PLATFORM             ?= PLATFORM_3DS
 
 # Library type used for raylib: STATIC (.a) or SHARED (.so/.dll)
 RAYLIB_LIBTYPE       ?= STATIC
@@ -61,7 +62,7 @@ RAYLIB_BUILD_MODE    ?= RELEASE
 
 # Include raylib modules on compilation
 # NOTE: Some programs like tools could not require those modules
-RAYLIB_MODULE_AUDIO  ?= TRUE
+RAYLIB_MODULE_AUDIO  ?= FALSE
 RAYLIB_MODULE_MODELS ?= TRUE
 RAYLIB_MODULE_RAYGUI ?= FALSE
 RAYLIB_MODULE_PHYSAC ?= FALSE
@@ -97,8 +98,8 @@ endif
 # user, "whoami" prints "root").
 ROOT = $(shell whoami)
 
-# By default we suppose we are working on Windows
-HOST_PLATFORM_OS ?= WINDOWS
+# By default we suppose we are working on Linux
+HOST_PLATFORM_OS ?= LINUX
 
 # Determine PLATFORM_OS in case PLATFORM_DESKTOP selected
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
@@ -212,6 +213,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
     # By default use OpenGL ES 2.0 on Android
     GRAPHICS = GRAPHICS_API_OPENGL_ES2
 endif
+ifeq ($(PLATFORM),PLATFORM_3DS)
+    # On 3DS OpenGL 1.1 must be used
+    GRAPHICS = GRAPHICS_API_OPENGL_11
+endif
 
 # Define default C compiler and archiver to pack library
 CC = gcc
@@ -258,6 +263,11 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
         CC = $(ANDROID_TOOLCHAIN)/bin/x86_64-linux-android$(ANDROID_API_VERSION)-clang
         AR = $(ANDROID_TOOLCHAIN)/bin/x86_64-linux-android-ar
     endif
+endif
+ifeq ($(PLATFORM),PLATFORM_3DS)
+    # DevkitARM
+    CC = $(DEVKITARM)/bin/arm-none-eabi-gcc
+    AR = $(DEVKITARM)/bin/arm-none-eabi-ar
 endif
 
 
@@ -347,6 +357,15 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
     CFLAGS += -DANDROID -DPLATFORM_ANDROID -D__ANDROID_API__=$(ANDROID_API_VERSION) -DMAL_NO_OSS
 endif
 
+ifeq ($(PLATFORM),PLATFORM_3DS)
+    # Compiler flags for arquitecture
+    CFLAGS += -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
+    # Compilation functions attributes options
+    CFLAGS += -mword-relocations -fomit-frame-pointer -ffunction-sections
+    # Preprocessor macro definitions
+    CFLAGS += -D_3DS
+endif
+
 # Define required compilation flags for raylib SHARED lib
 ifeq ($(RAYLIB_LIBTYPE),SHARED)
     # make sure code is compiled as position independent
@@ -396,6 +415,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
     INCLUDE_PATHS += -I$(ANDROID_TOOLCHAIN)/sysroot/usr/include
     # Include android_native_app_glue.h
     INCLUDE_PATHS += -I$(NATIVE_APP_GLUE)
+endif
+ifeq ($(PLATFORM),PLATFORM_3DS)
+    # 3DS required libraries
+    INCLUDE_PATHS += -I$(DEVKITPRO)/libctru/include -I$(DEVKITPRO)/picaGL/include
 endif
 
 # Define linker options
@@ -575,6 +598,10 @@ physac.o : physac.c physac.h
 # See below and ../examples/Makefile for more information.
 # TODO: Add other platforms. Remove sudo requirement, i.e. add USER mode.
 
+ifeq ($(PLATFORM),PLATFORM_3DS)
+    DESTDIR = $(DEVKITPRO)/portlibs/3ds
+endif
+
 # RAYLIB_INSTALL_PATH should be the desired full path to libraylib. No relative paths.
 DESTDIR ?= /usr/local
 RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
@@ -582,36 +609,48 @@ RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
 RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)/include
 
 install :
-ifeq ($(ROOT),root)
-    ifeq ($(PLATFORM_OS),LINUX)
+ifeq ($(PLATFORM_OS),LINUX)
+    ifeq ($(ROOT),root)
         # Attention! You are root, writing files to $(RAYLIB_INSTALL_PATH)
         # and $(RAYLIB_H_INSTALL_PATH). Consult this Makefile for more information.
         # Prepare the environment as needed.
-		mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
-		mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
+        mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
+        mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
         ifeq ($(RAYLIB_LIBTYPE),SHARED)
             # Installing raylib to $(RAYLIB_INSTALL_PATH).
-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.so.$(RAYLIB_VERSION) $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_VERSION)
-			cd $(RAYLIB_INSTALL_PATH); ln -fsv libraylib.so.$(RAYLIB_VERSION) libraylib.so.$(RAYLIB_API_VERSION)
-			cd $(RAYLIB_INSTALL_PATH); ln -fsv libraylib.so.$(RAYLIB_API_VERSION) libraylib.so
+            cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.so.$(RAYLIB_VERSION) $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_VERSION)
+            cd $(RAYLIB_INSTALL_PATH); ln -fsv libraylib.so.$(RAYLIB_VERSION) libraylib.so.$(RAYLIB_API_VERSION)
+            cd $(RAYLIB_INSTALL_PATH); ln -fsv libraylib.so.$(RAYLIB_API_VERSION) libraylib.so
             # Uncomment to update the runtime linker cache with RAYLIB_INSTALL_PATH.
             # Not necessary if later embedding RPATH in your executable. See examples/Makefile.
-			ldconfig $(RAYLIB_INSTALL_PATH)
+            ldconfig $(RAYLIB_INSTALL_PATH)
         else
             # Installing raylib to $(RAYLIB_INSTALL_PATH).
-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.a $(RAYLIB_INSTALL_PATH)/libraylib.a
+            cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.a $(RAYLIB_INSTALL_PATH)/libraylib.a
         endif
         # Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
-		cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
-		cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
-		cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
-		cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
-		@echo "raylib development files installed/updated!"
+        cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
+        cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
+        cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+        cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
+        @echo "raylib development files installed/updated!"
     else
-		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+        @echo "Error: Root permissions needed for installation. Try sudo make install"
     endif
+else ifeq ($(PLATFORM),PLATFORM_3DS)
+    # Prepare the environment as needed.
+	mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
+	mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
+    # Installing raylib to $(RAYLIB_INSTALL_PATH).
+	cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.a $(RAYLIB_INSTALL_PATH)/libraylib.a
+    # Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
+	cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
+	cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
+	cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+	cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
+	@echo "raylib development files installed/updated!"
 else
-	@echo "Error: Root permissions needed for installation. Try sudo make install"
+    @echo "This function currently works on GNU/Linux systems. Add yours today (^;"
 endif
 
 # Remove raylib dev files installed on the system

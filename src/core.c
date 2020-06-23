@@ -11,6 +11,7 @@
 *       - PLATFORM_RPI:     Raspberry Pi 0,1,2,3,4 (Raspbian)
 *       - PLATFORM_WEB:     HTML5 with asm.js (Chrome, Firefox)
 *       - PLATFORM_UWP:     Windows 10 App, Windows Phone, Xbox One
+*       - PLATFORM_3DS:     Nintendo 3DS
 *
 *   CONFIGURATION:
 *
@@ -33,6 +34,10 @@
 *   #define PLATFORM_UWP
 *       Universal Windows Platform support, using OpenGL ES 2.0 through ANGLE on multiple Windows platforms,
 *       including Windows 10 App, Windows Phone and Xbox One platforms.
+*
+*   #define PLATFORM_3DS
+*       Nintendo 3DS support, using OpenGL 1.1 through picaGL.
+*
 *
 *   #define SUPPORT_DEFAULT_FONT (default)
 *       Default font is loaded on window initialization to be available for the user to render simple text.
@@ -257,6 +262,11 @@
     #include <emscripten/html5.h>       // Emscripten HTML5 library
 #endif
 
+#if defined(PLATFORM_3DS)
+    #include "external/3ds.h"           // libctru - 3DS(CTR) User Library
+    #include <GL/picaGL.h>              // picaGL  - OpenGL implementation for the 3DS
+#endif
+
 #if defined(SUPPORT_COMPRESSION_API)
     // NOTE: Those declarations require stb_image and stb_image_write definitions, included in textures module
     unsigned char *stbi_zlib_compress(unsigned char *data, int data_len, int *out_len, int quality);
@@ -432,7 +442,7 @@ typedef struct CoreData {
         struct {
             int lastButtonPressed;          // Register last gamepad button pressed
             int axisCount;                  // Register number of available gamepad axis
-#if defined(PLATFORM_DESKTOP) || defined(PLATFORM_RPI) || defined(PLATFORM_WEB) || defined(PLATFORM_UWP)
+#if defined(PLATFORM_DESKTOP) || defined(PLATFORM_RPI) || defined(PLATFORM_WEB) || defined(PLATFORM_UWP) || defined(PLATFORM_3DS)
             bool ready[MAX_GAMEPADS];       // Flag to know if gamepad is ready
             float axisState[MAX_GAMEPADS][MAX_GAMEPAD_AXIS];        // Gamepad axis state
             char currentState[MAX_GAMEPADS][MAX_GAMEPAD_BUTTONS];   // Current gamepad buttons state
@@ -452,7 +462,7 @@ typedef struct CoreData {
         double draw;                        // Time measure for frame draw
         double frame;                       // Time measure for one frame
         double target;                      // Desired time for one frame, if 0 not applied
-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_UWP)
+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_UWP) || defined(PLATFORM_3DS)
         unsigned long long base;            // Base time measure for hi-res timer
 #endif
     } Time;
@@ -829,6 +839,11 @@ void CloseWindow(void)
     if (CORE.Input.Gamepad.threadId) pthread_join(CORE.Input.Gamepad.threadId, NULL);
 #endif
 
+#if defined(PLATFORM_3DS)
+    pglExit();
+    gfxExit();
+#endif
+
     TRACELOG(LOG_INFO, "Window closed successfully");
 }
 
@@ -866,6 +881,11 @@ bool WindowShouldClose(void)
 
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_UWP)
     if (CORE.Window.ready) return CORE.Window.shouldClose;
+    else return true;
+#endif
+
+#if defined(PLATFORM_3DS)
+    if(CORE.Window.ready) return !aptMainLoop();
     else return true;
 #endif
 }
@@ -1038,6 +1058,10 @@ void SetWindowMonitor(int monitor)
         glfwSetWindowMonitor(CORE.Window.handle, monitors[monitor], 0, 0, mode->width, mode->height, mode->refreshRate);
     }
     else TRACELOG(LOG_WARNING, "GLFW: Failed to find selected monitor");
+#endif
+
+#if defined(PLATFORM_3DS)
+    pglSelectScreen(monitor != 0, 0);
 #endif
 }
 
@@ -1764,6 +1788,11 @@ double GetTime(void)
 
 #if defined(PLATFORM_UWP)
     return UWPGetQueryTimeFunc()();
+#endif
+
+#if defined(PLATFORM_3DS)
+    uint64_t time = svcGetSystemTick();
+    return u64_to_double(time - CORE.Time.base) / TICKS_PER_SEC;
 #endif
 }
 
@@ -3236,6 +3265,24 @@ static bool InitGraphicsDevice(int width, int height)
     }
 #endif // PLATFORM_ANDROID || PLATFORM_RPI
 
+#if defined(PLATFORM_3DS)
+    //Initialize the LCD framebuffer
+    gfxInitDefault();
+    //Initialize picaGL
+    pglInit();
+
+    CORE.Window.display.width  = 400;
+    CORE.Window.display.height = 240;
+
+    // Screen size security check
+    if (CORE.Window.screen.width <= 0) CORE.Window.screen.width = CORE.Window.display.width;
+    if (CORE.Window.screen.height <= 0) CORE.Window.screen.height = CORE.Window.display.height;
+
+    // At this point we need to manage render size vs screen size
+    // NOTE: This function use and modify global module variables: CORE.Window.screen.width/CORE.Window.screen.height and CORE.Window.render.width/CORE.Window.render.height and CORE.Window.screenScale
+    SetupFramebuffer(CORE.Window.display.width, CORE.Window.display.height);
+#endif  //PLATFORM_3DS
+
     // Initialize OpenGL context (states and resources)
     // NOTE: CORE.Window.screen.width and CORE.Window.screen.height not used, just stored as globals in rlgl
     rlglInit(CORE.Window.screen.width, CORE.Window.screen.height);
@@ -3261,7 +3308,7 @@ static bool InitGraphicsDevice(int width, int height)
 
     ClearBackground(RAYWHITE);      // Default background color for raylib games :P
 
-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_UWP)
+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_UWP) || defined(PLATFORM_3DS)
     CORE.Window.ready = true;
 #endif
     return true;
@@ -3380,6 +3427,10 @@ static void InitTimer(void)
     else TRACELOG(LOG_WARNING, "TIMER: Hi-resolution timer not available");
 #endif
 
+#if defined(PLATFORM_3DS)
+    CORE.Time.base = svcGetSystemTick();
+#endif
+
     CORE.Time.previous = GetTime();       // Get time as double
 }
 
@@ -3482,6 +3533,24 @@ static int GetGamepadButton(int button)
         case 13: btn = GAMEPAD_BUTTON_LEFT_FACE_DOWN; break;
         case 14: btn = GAMEPAD_BUTTON_LEFT_FACE_LEFT; break;
         case 15: btn = GAMEPAD_BUTTON_LEFT_FACE_RIGHT; break;
+    }
+#endif
+
+#if defined(PLATFORM_3DS)
+    switch (button)
+    {
+        case 0: btn = GAMEPAD_BUTTON_RIGHT_FACE_RIGHT; break;
+        case 1: btn = GAMEPAD_BUTTON_RIGHT_FACE_DOWN; break;
+        case 2: btn = GAMEPAD_BUTTON_MIDDLE_LEFT; break;
+        case 3: btn = GAMEPAD_BUTTON_MIDDLE_RIGHT; break;
+        case 4: btn = GAMEPAD_BUTTON_LEFT_FACE_RIGHT; break;
+        case 5: btn = GAMEPAD_BUTTON_LEFT_FACE_LEFT; break;
+        case 6: btn = GAMEPAD_BUTTON_LEFT_FACE_UP; break;
+        case 7: btn = GAMEPAD_BUTTON_LEFT_FACE_DOWN; break;
+        case 8: btn = GAMEPAD_BUTTON_RIGHT_TRIGGER_1; break;
+        case 9: btn = GAMEPAD_BUTTON_LEFT_TRIGGER_1; break;
+        case 10: btn = GAMEPAD_BUTTON_RIGHT_FACE_UP; break;
+        case 11: btn = GAMEPAD_BUTTON_RIGHT_FACE_LEFT; break;
     }
 #endif
 
@@ -3670,6 +3739,29 @@ static void PollInputEvents(void)
     }
 #endif
 
+#if defined(PLATFORM_3DS)
+    hidScanInput();
+
+    CORE.Input.Gamepad.ready[0] = true;
+
+    for (int k = 0; k < 12; k++)
+    {
+        const GamepadButton button = GetGamepadButton(k);
+
+        CORE.Input.Gamepad.previousState[0][button] = CORE.Input.Gamepad.currentState[0][button];
+
+        if (hidKeysHeld() & (1 << k))
+        {
+            CORE.Input.Gamepad.currentState[0][button] = 1;
+            CORE.Input.Gamepad.lastButtonPressed = button;
+        }
+        else
+        {
+            CORE.Input.Gamepad.currentState[0][button] = 0;
+        }
+    }
+#endif
+
 #if defined(PLATFORM_ANDROID)
     // Register previous keys states
     // NOTE: Android supports up to 260 keys
@@ -3714,6 +3806,10 @@ static void SwapBuffers(void)
 
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_UWP)
     eglSwapBuffers(CORE.Window.device, CORE.Window.surface);
+#endif
+
+#if defined(PLATFORM_3DS)
+    pglSwapBuffers();
 #endif
 }
 

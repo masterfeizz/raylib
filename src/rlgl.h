@@ -826,7 +826,6 @@ typedef struct VrStereoConfig {
 } VrStereoConfig;
 #endif
 
-#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
 typedef struct rlglData {
     RenderBatch *currentBatch;              // Current render batch
     RenderBatch defaultBatch;               // Default internal render batch
@@ -880,14 +879,11 @@ typedef struct rlglData {
     } Vr;
 #endif  // SUPPORT_VR_SIMULATOR
 } rlglData;
-#endif  // GRAPHICS_API_OPENGL_33 || GRAPHICS_API_OPENGL_ES2
 
 //----------------------------------------------------------------------------------
 // Global Variables Definition
 //----------------------------------------------------------------------------------
-#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
 static rlglData RLGL = { 0 };
-#endif  // GRAPHICS_API_OPENGL_33 || GRAPHICS_API_OPENGL_ES2
 
 #if defined(GRAPHICS_API_OPENGL_ES2)
 // NOTE: VAO functionality is exposed through extensions (OES)
