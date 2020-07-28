@@ -517,7 +517,7 @@ static float Vector2Distance(Vector2 v1, Vector2 v2)
 // Time measure returned are milliseconds
 static double GetCurrentTime(void)
 {
-    double time = 0;
+    double time = GetTime() / 1000;
 
 #if defined(_WIN32)
     unsigned long long int clockFrequency, currentTime;
