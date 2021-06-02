@@ -74,7 +74,7 @@ int main(void)
 
     Model model = LoadModel("resources/models/church.obj");                 // Load OBJ model
     Texture2D texture = LoadTexture("resources/models/church_diffuse.png"); // Load model texture (diffuse map)
-    model.materials[0].maps[MAP_DIFFUSE].texture = texture;                     // Set model diffuse texture
+    model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;                     // Set model diffuse texture
 
     Vector3 position = { 0.0f, 0.0f, 0.0f };                             // Set model position
 
@@ -84,18 +84,18 @@ int main(void)
     Shader shaders[MAX_POSTPRO_SHADERS] = { 0 };
 
     // NOTE: Defining 0 (NULL) for vertex shader forces usage of internal default vertex shader
-    shaders[FX_GRAYSCALE] = LoadShader(0, FormatText("resources/shaders/glsl%i/grayscale.fs", GLSL_VERSION));
-    shaders[FX_POSTERIZATION] = LoadShader(0, FormatText("resources/shaders/glsl%i/posterization.fs", GLSL_VERSION));
-    shaders[FX_DREAM_VISION] = LoadShader(0, FormatText("resources/shaders/glsl%i/dream_vision.fs", GLSL_VERSION));
-    shaders[FX_PIXELIZER] = LoadShader(0, FormatText("resources/shaders/glsl%i/pixelizer.fs", GLSL_VERSION));
-    shaders[FX_CROSS_HATCHING] = LoadShader(0, FormatText("resources/shaders/glsl%i/cross_hatching.fs", GLSL_VERSION));
-    shaders[FX_CROSS_STITCHING] = LoadShader(0, FormatText("resources/shaders/glsl%i/cross_stitching.fs", GLSL_VERSION));
-    shaders[FX_PREDATOR_VIEW] = LoadShader(0, FormatText("resources/shaders/glsl%i/predator.fs", GLSL_VERSION));
-    shaders[FX_SCANLINES] = LoadShader(0, FormatText("resources/shaders/glsl%i/scanlines.fs", GLSL_VERSION));
-    shaders[FX_FISHEYE] = LoadShader(0, FormatText("resources/shaders/glsl%i/fisheye.fs", GLSL_VERSION));
-    shaders[FX_SOBEL] = LoadShader(0, FormatText("resources/shaders/glsl%i/sobel.fs", GLSL_VERSION));
-    shaders[FX_BLOOM] = LoadShader(0, FormatText("resources/shaders/glsl%i/bloom.fs", GLSL_VERSION));
-    shaders[FX_BLUR] = LoadShader(0, FormatText("resources/shaders/glsl%i/blur.fs", GLSL_VERSION));
+    shaders[FX_GRAYSCALE] = LoadShader(0, TextFormat("resources/shaders/glsl%i/grayscale.fs", GLSL_VERSION));
+    shaders[FX_POSTERIZATION] = LoadShader(0, TextFormat("resources/shaders/glsl%i/posterization.fs", GLSL_VERSION));
+    shaders[FX_DREAM_VISION] = LoadShader(0, TextFormat("resources/shaders/glsl%i/dream_vision.fs", GLSL_VERSION));
+    shaders[FX_PIXELIZER] = LoadShader(0, TextFormat("resources/shaders/glsl%i/pixelizer.fs", GLSL_VERSION));
+    shaders[FX_CROSS_HATCHING] = LoadShader(0, TextFormat("resources/shaders/glsl%i/cross_hatching.fs", GLSL_VERSION));
+    shaders[FX_CROSS_STITCHING] = LoadShader(0, TextFormat("resources/shaders/glsl%i/cross_stitching.fs", GLSL_VERSION));
+    shaders[FX_PREDATOR_VIEW] = LoadShader(0, TextFormat("resources/shaders/glsl%i/predator.fs", GLSL_VERSION));
+    shaders[FX_SCANLINES] = LoadShader(0, TextFormat("resources/shaders/glsl%i/scanlines.fs", GLSL_VERSION));
+    shaders[FX_FISHEYE] = LoadShader(0, TextFormat("resources/shaders/glsl%i/fisheye.fs", GLSL_VERSION));
+    shaders[FX_SOBEL] = LoadShader(0, TextFormat("resources/shaders/glsl%i/sobel.fs", GLSL_VERSION));
+    shaders[FX_BLOOM] = LoadShader(0, TextFormat("resources/shaders/glsl%i/bloom.fs", GLSL_VERSION));
+    shaders[FX_BLUR] = LoadShader(0, TextFormat("resources/shaders/glsl%i/blur.fs", GLSL_VERSION));
 
     int currentShader = FX_GRAYSCALE;
 
@@ -146,7 +146,7 @@ int main(void)
             BeginShaderMode(shaders[currentShader]);
 
                 // NOTE: Render texture must be y-flipped due to default OpenGL coordinates (left-bottom)
-                DrawTextureRec(target.texture, (Rectangle){ 0, 0, target.texture.width, -target.texture.height }, (Vector2){ 0, 0 }, WHITE);
+                DrawTextureRec(target.texture, (Rectangle){ 0, 0, (float)target.texture.width, (float)-target.texture.height }, (Vector2){ 0, 0 }, WHITE);
 
             EndShaderMode();
 

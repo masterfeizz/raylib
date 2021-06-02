@@ -41,17 +41,17 @@ int main(void)
     camera.target = (Vector3){ 0.0f, 1.5f, 0.0f };
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
     camera.fovy = 45.0f;
-    camera.type = CAMERA_PERSPECTIVE;
+    camera.projection = CAMERA_PERSPECTIVE;
 
     Model model = LoadModel("resources/models/barracks.obj");                   // Load OBJ model
     Texture2D texture = LoadTexture("resources/models/barracks_diffuse.png");   // Load model texture (diffuse map)
-    model.materials[0].maps[MAP_DIFFUSE].texture = texture;                     // Set model diffuse texture
+    model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;                     // Set model diffuse texture
 
     Vector3 position = { 0.0f, 0.0f, 0.0f };                                    // Set model position
 
     // Load postprocessing shader
     // NOTE: Defining 0 (NULL) for vertex shader forces usage of internal default vertex shader
-    Shader shader = LoadShader(0, FormatText("resources/shaders/glsl%i/swirl.fs", GLSL_VERSION));
+    Shader shader = LoadShader(0, TextFormat("resources/shaders/glsl%i/swirl.fs", GLSL_VERSION));
 
     // Get variable (uniform) location on the shader to connect with the program
     // NOTE: If uniform variable could not be found in the shader, function returns -1
@@ -79,7 +79,7 @@ int main(void)
         swirlCenter[1] = screenHeight - mousePosition.y;
 
         // Send new value to the shader to be used on drawing
-        SetShaderValue(shader, swirlCenterLoc, swirlCenter, UNIFORM_VEC2);
+        SetShaderValue(shader, swirlCenterLoc, swirlCenter, SHADER_UNIFORM_VEC2);
 
         UpdateCamera(&camera);              // Update camera
         //----------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ int main(void)
             BeginShaderMode(shader);
 
                 // NOTE: Render texture must be y-flipped due to default OpenGL coordinates (left-bottom)
-                DrawTextureRec(target.texture, (Rectangle){ 0, 0, target.texture.width, -target.texture.height }, (Vector2){ 0, 0 }, WHITE);
+                DrawTextureRec(target.texture, (Rectangle){ 0, 0, (float)target.texture.width, (float)-target.texture.height }, (Vector2){ 0, 0 }, WHITE);
 
             EndShaderMode();
 

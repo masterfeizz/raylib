@@ -40,7 +40,7 @@ int main(void)
 
     // Load raymarching shader
     // NOTE: Defining 0 (NULL) for vertex shader forces usage of internal default vertex shader
-    Shader shader = LoadShader(0, FormatText("resources/shaders/glsl%i/raymarching.fs", GLSL_VERSION));
+    Shader shader = LoadShader(0, TextFormat("resources/shaders/glsl%i/raymarching.fs", GLSL_VERSION));
 
     // Get shader locations for required uniforms
     int viewEyeLoc = GetShaderLocation(shader, "viewEye");
@@ -49,7 +49,7 @@ int main(void)
     int resolutionLoc = GetShaderLocation(shader, "resolution");
 
     float resolution[2] = { (float)screenWidth, (float)screenHeight };
-    SetShaderValue(shader, resolutionLoc, resolution, UNIFORM_VEC2);
+    SetShaderValue(shader, resolutionLoc, resolution, SHADER_UNIFORM_VEC2);
 
     float runTime = 0.0f;
 
@@ -59,16 +59,6 @@ int main(void)
     // Main game loop
     while (!WindowShouldClose())            // Detect window close button or ESC key
     {
-        // Check if screen is resized
-        //----------------------------------------------------------------------------------
-        if(IsWindowResized())
-        {
-            screenWidth = GetScreenWidth();
-            screenHeight = GetScreenHeight();
-            float resolution[2] = { (float)screenWidth, (float)screenHeight };
-            SetShaderValue(shader, resolutionLoc, resolution, UNIFORM_VEC2);
-        }
-
         // Update
         //----------------------------------------------------------------------------------
         UpdateCamera(&camera);              // Update camera
@@ -80,9 +70,18 @@ int main(void)
         runTime += deltaTime;
 
         // Set shader required uniform values
-        SetShaderValue(shader, viewEyeLoc, cameraPos, UNIFORM_VEC3);
-        SetShaderValue(shader, viewCenterLoc, cameraTarget, UNIFORM_VEC3);
-        SetShaderValue(shader, runTimeLoc, &runTime, UNIFORM_FLOAT);
+        SetShaderValue(shader, viewEyeLoc, cameraPos, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, viewCenterLoc, cameraTarget, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, runTimeLoc, &runTime, SHADER_UNIFORM_FLOAT);
+
+        // Check if screen is resized
+        if (IsWindowResized())
+        {
+            screenWidth = GetScreenWidth();
+            screenHeight = GetScreenHeight();
+            float resolution[2] = { (float)screenWidth, (float)screenHeight };
+            SetShaderValue(shader, resolutionLoc, resolution, SHADER_UNIFORM_VEC2);
+        }
         //----------------------------------------------------------------------------------
 
         // Draw

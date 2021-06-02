@@ -5,9 +5,9 @@
 *   This example has been created using raylib 2.5 (www.raylib.com)
 *   raylib is licensed under an unmodified zlib/libpng license (View raylib.h for details)
 *
-*   Example contributed by Chris Camacho (@codifies) and reviewed by Ramon Santamaria (@raysan5)
+*   Example contributed by Chris Camacho (@chriscamacho) and reviewed by Ramon Santamaria (@raysan5)
 *
-*   Copyright (c) 2019 Chris Camacho (@codifies) and Ramon Santamaria (@raysan5)
+*   Copyright (c) 2019 Chris Camacho (@chriscamacho) and Ramon Santamaria (@raysan5)
 *
 ********************************************************************************************
 *
@@ -42,13 +42,13 @@ int main(void)
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
     camera.fovy = 45.0f;
-    camera.type = CAMERA_PERSPECTIVE;
+    camera.projection = CAMERA_PERSPECTIVE;
 
     // Define our three models to show the shader on
-    Mesh torus = GenMeshTorus(.3, 1, 16, 32);
+    Mesh torus = GenMeshTorus(0.3f, 1, 16, 32);
     Model model1 = LoadModelFromMesh(torus);
 
-    Mesh cube = GenMeshCube(.8,.8,.8);
+    Mesh cube = GenMeshCube(0.8f,0.8f,0.8f);
     Model model2 = LoadModelFromMesh(cube);
 
     // Generate model to be shaded just to see the gaps in the other two
@@ -56,20 +56,19 @@ int main(void)
     Model model3 = LoadModelFromMesh(sphere);
 
     // Load the shader
-    Shader shader = LoadShader(0, FormatText("resources/shaders/glsl%i/mask.fs", GLSL_VERSION));
-    
+    Shader shader = LoadShader(0, TextFormat("resources/shaders/glsl%i/mask.fs", GLSL_VERSION));
+
     // Load and apply the diffuse texture (colour map)
     Texture texDiffuse = LoadTexture("resources/plasma.png");
-    model1.materials[0].maps[MAP_DIFFUSE].texture = texDiffuse;
-    model2.materials[0].maps[MAP_DIFFUSE].texture = texDiffuse;
+    model1.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texDiffuse;
+    model2.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texDiffuse;
 
-    // Using MAP_EMISSION as a spare slot to use for 2nd texture
-    // NOTE: Don't use MAP_IRRADIANCE, MAP_PREFILTER or  MAP_CUBEMAP
-    // as they are bound as cube maps
+    // Using MATERIAL_MAP_EMISSION as a spare slot to use for 2nd texture
+    // NOTE: Don't use MATERIAL_MAP_IRRADIANCE, MATERIAL_MAP_PREFILTER or  MATERIAL_MAP_CUBEMAP as they are bound as cube maps
     Texture texMask = LoadTexture("resources/mask.png");
-    model1.materials[0].maps[MAP_EMISSION].texture = texMask;
-    model2.materials[0].maps[MAP_EMISSION].texture = texMask;
-    shader.locs[LOC_MAP_EMISSION] = GetShaderLocation(shader, "mask");
+    model1.materials[0].maps[MATERIAL_MAP_EMISSION].texture = texMask;
+    model2.materials[0].maps[MATERIAL_MAP_EMISSION].texture = texMask;
+    shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "mask");
 
     // Frame is incremented each frame to animate the shader
     int shaderFrame = GetShaderLocation(shader, "frame");
@@ -95,7 +94,7 @@ int main(void)
         rotation.z -= 0.0025f;
 
         // Send frames counter to shader for animation
-        SetShaderValue(shader, shaderFrame, &framesCounter, UNIFORM_INT);
+        SetShaderValue(shader, shaderFrame, &framesCounter, SHADER_UNIFORM_INT);
 
         // Rotate one of the models
         model1.transform = MatrixRotateXYZ(rotation);
@@ -118,8 +117,8 @@ int main(void)
 
             EndMode3D();
 
-            DrawRectangle(16, 698, MeasureText(FormatText("Frame: %i", framesCounter), 20) + 8, 42, BLUE);
-            DrawText(FormatText("Frame: %i", framesCounter), 20, 700, 20, WHITE);
+            DrawRectangle(16, 698, MeasureText(TextFormat("Frame: %i", framesCounter), 20) + 8, 42, BLUE);
+            DrawText(TextFormat("Frame: %i", framesCounter), 20, 700, 20, WHITE);
 
             DrawFPS(10, 10);
 
@@ -132,10 +131,10 @@ int main(void)
     UnloadModel(model1);
     UnloadModel(model2);
     UnloadModel(model3);
-    
+
     UnloadTexture(texDiffuse);  // Unload default diffuse texture
     UnloadTexture(texMask);     // Unload texture mask
-    
+
     UnloadShader(shader);       // Unload shader
 
     CloseWindow();              // Close window and OpenGL context

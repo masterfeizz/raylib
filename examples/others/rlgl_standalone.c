@@ -9,15 +9,20 @@
 *       rlgl.h    - OpenGL 1.1 immediate-mode style coding translation layer
 *       glad.h    - OpenGL extensions initialization library (required by rlgl)
 *       raymath.h - 3D math library (required by rlgl)
-*       glfw3     - Windows and context initialization library 
+*       glfw3     - Windows and context initialization library
 *
 *   rlgl library is provided as a single-file header-only library, this library
 *   allows coding in a pseudo-OpenGL 1.1 style while translating calls to multiple
 *   OpenGL versions backends (1.1, 2.1, 3.3, ES 2.0).
 *
-*   COMPILATION:
+*   WINDOWS COMPILATION:
 *       gcc -o rlgl_standalone.exe rlgl_standalone.c -s -Iexternal\include -I..\..\src  \
 *           -L. -Lexternal\lib -lglfw3 -lopengl32 -lgdi32 -Wall -std=c99 -DGRAPHICS_API_OPENGL_33
+*
+*   APPLE COMPILATION:
+*       gcc -o rlgl_standalone rlgl_standalone.c -I../../src -Iexternal/include -Lexternal/lib \
+*           -lglfw3 -std=c99 -framework CoreVideo -framework OpenGL -framework OpenAL \
+*           -framework IOKit -framework Cocoa -Wno-deprecated-declarations
 *
 *   LICENSE: zlib/libpng
 *
@@ -52,13 +57,22 @@
     #define GLFW_INCLUDE_ES2
 #endif
 
-#include <GLFW/glfw3.h>         // Windows/Context and inputs management
+#include "GLFW/glfw3.h"         // Windows/Context and inputs management
 
 #include <stdio.h>              // Required for: printf()
 
 #define RED        (Color){ 230, 41, 55, 255 }     // Red
 #define RAYWHITE   (Color){ 245, 245, 245, 255 }   // My own White (raylib logo)
 #define DARKGRAY   (Color){ 80, 80, 80, 255 }      // Dark Gray
+
+// Camera type, defines a camera position/orientation in 3d space
+typedef struct Camera {
+    Vector3 position;       // Camera position
+    Vector3 target;         // Camera target it looks-at
+    Vector3 up;             // Camera up vector (rotation over its axis)
+    float fovy;             // Camera field-of-view apperture in Y (degrees) in perspective, used as near plane width in orthographic
+    int projection;         // Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
+} Camera;
 
 //----------------------------------------------------------------------------------
 // Module specific Functions Declaration
@@ -81,45 +95,49 @@ int main(void)
     //--------------------------------------------------------------------------------------
     const int screenWidth = 800;
     const int screenHeight = 450;
-    
+
     // GLFW3 Initialization + OpenGL 3.3 Context + Extensions
     //--------------------------------------------------------
     glfwSetErrorCallback(ErrorCallback);
-    
+
     if (!glfwInit())
     {
         printf("GLFW3: Can not initialize GLFW\n");
         return 1;
     }
     else printf("GLFW3: GLFW initialized successfully\n");
-    
+
     glfwWindowHint(GLFW_SAMPLES, 4);
     glfwWindowHint(GLFW_DEPTH_BITS, 16);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     //glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-   
+#if defined(__APPLE__)
+    glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
+#endif
+
+
     GLFWwindow *window = glfwCreateWindow(screenWidth, screenHeight, "rlgl standalone", NULL, NULL);
-    
+
     if (!window)
     {
         glfwTerminate();
         return 2;
     }
     else printf("GLFW3: Window created successfully\n");
-    
+
     glfwSetWindowPos(window, 200, 200);
-    
+
     glfwSetKeyCallback(window, KeyCallback);
-    
+
     glfwMakeContextCurrent(window);
     glfwSwapInterval(0);
-    
+
     // Load OpenGL 3.3 supported extensions
     rlLoadExtensions(glfwGetProcAddress);
     //--------------------------------------------------------
-    
+
     // Initialize OpenGL context (states and resources)
     rlglInit(screenWidth, screenHeight);
 
@@ -133,18 +151,18 @@ int main(void)
 
     rlClearColor(245, 245, 245, 255);                   // Define clear color
     rlEnableDepthTest();                                // Enable DEPTH_TEST for 3D
-    
+
     Camera camera = { 0 };
     camera.position = (Vector3){ 5.0f, 5.0f, 5.0f };    // Camera position
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };      // Camera looking at point
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
     camera.fovy = 45.0f;                                // Camera field-of-view Y
-    
-    Vector3 cubePosition = { 0.0f, 0.0f, 0.0f };        // Cube default position (center)
-    //--------------------------------------------------------------------------------------    
 
-    // Main game loop    
-    while (!glfwWindowShouldClose(window)) 
+    Vector3 cubePosition = { 0.0f, 0.0f, 0.0f };        // Cube default position (center)
+    //--------------------------------------------------------------------------------------
+
+    // Main game loop
+    while (!glfwWindowShouldClose(window))
     {
         // Update
         //----------------------------------------------------------------------------------
@@ -158,29 +176,29 @@ int main(void)
             // Draw '3D' elements in the scene
             //-----------------------------------------------
             // Calculate projection matrix (from perspective) and view matrix from camera look at
-            Matrix matProj = MatrixPerspective(camera.fovy*DEG2RAD, (double)screenWidth/(double)screenHeight, 0.01, 1000.0);
+            Matrix matProj = MatrixPerspective((double)(camera.fovy*DEG2RAD), (double)screenWidth/(double)screenHeight, 0.01, 1000.0);
             Matrix matView = MatrixLookAt(camera.position, camera.target, camera.up);
 
-            SetMatrixModelview(matView);    // Set internal modelview matrix (default shader)
-            SetMatrixProjection(matProj);   // Set internal projection matrix (default shader)
+            rlSetMatrixModelview(matView);    // Set internal modelview matrix (default shader)
+            rlSetMatrixProjection(matProj);   // Set internal projection matrix (default shader)
 
             DrawCube(cubePosition, 2.0f, 2.0f, 2.0f, RED);
             DrawCubeWires(cubePosition, 2.0f, 2.0f, 2.0f, RAYWHITE);
             DrawGrid(10, 1.0f);
 
-            // NOTE: Internal buffers drawing (3D data)
-            rlglDraw();
+            // Draw internal render batch buffers (3D data)
+            rlDrawRenderBatchActive();
             //-----------------------------------------------
-            
+
             // Draw '2D' elements in the scene (GUI)
             //-----------------------------------------------
 #define RLGL_CREATE_MATRIX_MANUALLY
 #if defined(RLGL_CREATE_MATRIX_MANUALLY)
             matProj = MatrixOrtho(0.0, screenWidth, screenHeight, 0.0, 0.0, 1.0);
             matView = MatrixIdentity();
-            
-            SetMatrixModelview(matView);    // Set internal modelview matrix (default shader)
-            SetMatrixProjection(matProj);   // Set internal projection matrix (default shader)
+
+            rlSetMatrixModelview(matView);    // Set internal modelview matrix (default shader)
+            rlSetMatrixProjection(matProj);   // Set internal projection matrix (default shader)
 
 #else   // Let rlgl generate and multiply matrix internally
 
@@ -192,10 +210,10 @@ int main(void)
 #endif
             DrawRectangleV((Vector2){ 10.0f, 10.0f }, (Vector2){ 780.0f, 20.0f }, DARKGRAY);
 
-            // NOTE: Internal buffers drawing (2D data)
-            rlglDraw();
+            // Draw internal render batch buffers (3D data)
+            rlDrawRenderBatchActive();
             //-----------------------------------------------
-            
+
         glfwSwapBuffers(window);
         glfwPollEvents();
         //----------------------------------------------------------------------------------
@@ -204,11 +222,11 @@ int main(void)
     // De-Initialization
     //--------------------------------------------------------------------------------------
     rlglClose();                    // Unload rlgl internal buffers and default shader/texture
-    
+
     glfwDestroyWindow(window);      // Close window
     glfwTerminate();                // Free GLFW3 resources
     //--------------------------------------------------------------------------------------
-    
+
     return 0;
 }
 
@@ -219,7 +237,7 @@ int main(void)
 // GLFW3: Error callback
 static void ErrorCallback(int error, const char *description)
 {
-    fprintf(stderr, description);
+    fprintf(stderr, "%s", description);
 }
 
 // GLFW3: Keyboard callback
@@ -237,13 +255,13 @@ static void DrawRectangleV(Vector2 position, Vector2 size, Color color)
     rlBegin(RL_TRIANGLES);
         rlColor4ub(color.r, color.g, color.b, color.a);
 
-        rlVertex2i(position.x, position.y);
-        rlVertex2i(position.x, position.y + size.y);
-        rlVertex2i(position.x + size.x, position.y + size.y);
+        rlVertex2f(position.x, position.y);
+        rlVertex2f(position.x, position.y + size.y);
+        rlVertex2f(position.x + size.x, position.y + size.y);
 
-        rlVertex2i(position.x, position.y);
-        rlVertex2i(position.x + size.x, position.y + size.y);
-        rlVertex2i(position.x + size.x, position.y);
+        rlVertex2f(position.x, position.y);
+        rlVertex2f(position.x + size.x, position.y + size.y);
+        rlVertex2f(position.x + size.x, position.y);
     rlEnd();
 }
 

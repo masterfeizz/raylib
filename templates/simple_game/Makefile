@@ -2,7 +2,7 @@
 #
 #   raylib makefile for Desktop platforms, Raspberry Pi, Android and HTML5
 #
-#   Copyright (c) 2013-2020 Ramon Santamaria (@raysan5)
+#   Copyright (c) 2013-2021 Ramon Santamaria (@raysan5)
 #
 #   This software is provided "as-is", without any express or implied warranty. In no event
 #   will the authors be held liable for any damages arising from the use of this software.
@@ -25,8 +25,7 @@
 
 # Define required raylib variables
 PROJECT_NAME       ?= simple_game
-RAYLIB_VERSION     ?= 3.0.0
-RAYLIB_API_VERSION ?= 3
+RAYLIB_VERSION     ?= 3.7.0
 RAYLIB_PATH        ?= ../..
 
 # Define default options
@@ -96,6 +95,21 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
         PLATFORM_OS=LINUX
     endif
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    UNAMEOS=$(shell uname)
+    ifeq ($(UNAMEOS),Linux)
+        PLATFORM_OS=LINUX
+    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_ANDROID)
+    UNAMEOS=$(shell uname)
+    ifeq ($(UNAMEOS),Linux)
+        PLATFORM_OS=LINUX
+    endif
+    ifeq ($(UNAMEOS),Darwin)
+        PLATFORM_OS=OSX
+    endif
+endif
 
 # RAYLIB_PATH adjustment for different platforms.
 # If using GNU make, we can get the full path to the top of the tree. Windows? BSD?
@@ -110,16 +124,19 @@ endif
 # This is not currently used by src/Makefile. Not sure of its origin or usage. Refer to wiki.
 # TODO: update install: target in src/Makefile for RPI, consider relation to LINUX.
 ifeq ($(PLATFORM),PLATFORM_RPI)
-    RAYLIB_PATH       ?= /home/pi/raylib
+    RAYLIB_PATH        ?= /home/pi/raylib
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    RAYLIB_PATH        ?= /home/pi/raylib
 endif
 
 ifeq ($(PLATFORM),PLATFORM_WEB)
     # Emscripten required variables
     EMSDK_PATH         ?= C:/emsdk
-    EMSCRIPTEN_PATH    ?= $(EMSDK_PATH)/fastcomp/emscripten
-    CLANG_PATH          = $(EMSDK_PATH)/fastcomp/bin
-    PYTHON_PATH         = $(EMSDK_PATH)/python/2.7.13.1_64bit/python-2.7.13.amd64
-    NODE_PATH           = $(EMSDK_PATH)/node/12.9.1_64bit/bin
+    EMSCRIPTEN_PATH    ?= $(EMSDK_PATH)/upstream/emscripten
+    CLANG_PATH          = $(EMSDK_PATH)/upstream/bin
+    PYTHON_PATH         = $(EMSDK_PATH)/python/3.7.4-pywin32_64bit
+    NODE_PATH           = $(EMSDK_PATH)/node/12.18.1_64bit/bin
     export PATH         = $(EMSDK_PATH);$(EMSCRIPTEN_PATH);$(CLANG_PATH);$(NODE_PATH);$(PYTHON_PATH);C:\raylib\MinGW\bin:$$(PATH)
 endif
 
@@ -169,16 +186,16 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
     CC = emcc
 endif
 
-# Define default make program: Mingw32-make
-MAKE = mingw32-make
+# Define default make program
+MAKE = make
 
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
-    ifeq ($(PLATFORM_OS),LINUX)
-        MAKE = make
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        MAKE = mingw32-make
     endif
-    ifeq ($(PLATFORM_OS),OSX)
-        MAKE = make
-    endif
+endif
+ifeq ($(PLATFORM),PLATFORM_ANDROID)
+    MAKE = mingw32-make
 endif
 
 # Define compiler flags:
@@ -221,24 +238,26 @@ endif
 ifeq ($(PLATFORM),PLATFORM_RPI)
     CFLAGS += -std=gnu99
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    CFLAGS += -std=gnu99 -DEGL_NO_X11
+endif
 ifeq ($(PLATFORM),PLATFORM_WEB)
     # -Os                        # size optimization
     # -O2                        # optimization level 2, if used, also set --memory-init-file 0
     # -s USE_GLFW=3              # Use glfw3 library (context/input management)
     # -s ALLOW_MEMORY_GROWTH=1   # to allow memory resizing -> WARNING: Audio buffers could FAIL!
-    # -s TOTAL_MEMORY=16777216   # to specify heap memory size (default = 16MB)
+    # -s TOTAL_MEMORY=16777216   # to specify heap memory size (default = 16MB) (67108864 = 64MB)
     # -s USE_PTHREADS=1          # multithreading support
     # -s WASM=0                  # disable Web Assembly, emitted by default
-    # -s EMTERPRETIFY=1          # enable emscripten code interpreter (very slow)
-    # -s EMTERPRETIFY_ASYNC=1    # support synchronous loops by emterpreter
+    # -s ASYNCIFY                # lets synchronous C/C++ code interact with asynchronous JS
     # -s FORCE_FILESYSTEM=1      # force filesystem to load/save files data
     # -s ASSERTIONS=1            # enable runtime checks for common memory allocation errors (-O1 and above turn it off)
     # --profiling                # include information for code profiling
     # --memory-init-file 0       # to avoid an external memory initialization code file (.mem)
     # --preload-file resources   # specify a resources folder for data compilation
-    CFLAGS += -s USE_GLFW=3 -s TOTAL_MEMORY=16777216 -s EMTERPRETIFY=1 -s EMTERPRETIFY_ASYNC=1
+    CFLAGS += -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -s FORCE_FILESYSTEM=1 
 
-    # NOTE: Simple raylib examples are compiled to be interpreter by emterpreter, that way,
+    # NOTE: Simple raylib examples are compiled to be interpreter with asyncify, that way,
     # we can compile same code for ALL platforms with no change required, but, working on bigger
     # projects, code needs to be refactored to avoid a blocking while() loop, moving Update and Draw
     # logic to a self contained function: UpdateDrawFrame(), check core_basic_window_web.c for reference.
@@ -259,6 +278,10 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
     INCLUDE_PATHS += -I/opt/vc/include/interface/vmcs_host/linux
     INCLUDE_PATHS += -I/opt/vc/include/interface/vcos/pthreads
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # DRM required libraries
+    INCLUDE_PATHS += -I/usr/include/libdrm
+endif
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),BSD)
         # Consider -L$(RAYLIB_H_INSTALL_PATH)
@@ -267,7 +290,7 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),LINUX)
         # Reset everything.
         # Precedence: immediately local, installed version, raysan5 provided libs -I$(RAYLIB_H_INSTALL_PATH) -I$(RAYLIB_PATH)/release/include
-        INCLUDE_PATHS = -I$(RAYLIB_H_INSTALL_PATH) -isystem. -isystem$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/release/include -isystem$(RAYLIB_PATH)/src/external
+        INCLUDE_PATHS = -I$(RAYLIB_H_INSTALL_PATH) -I. -I$(RAYLIB_PATH)/src -I$(RAYLIB_PATH)/release/include -I$(RAYLIB_PATH)/src/external
     endif
 endif
 
@@ -277,7 +300,7 @@ LDFLAGS = -L. -L$(RAYLIB_RELEASE_PATH) -L$(RAYLIB_PATH)/src
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),WINDOWS)
         # resource file contains windows executable icon and properties
-        LDFLAGS += $(RAYLIB_PATH)/src/raylib.rc.data 
+        LDFLAGS += $(RAYLIB_PATH)/src/raylib.rc.data
         # -Wl,--subsystem,windows hides the console window
         ifeq ($(BUILD_MODE), RELEASE)
             LDFLAGS += -Wl,--subsystem,windows
@@ -290,12 +313,16 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),LINUX)
         # Reset everything.
         # Precedence: immediately local, installed version, raysan5 provided libs
-        LDFLAGS = -L. -L$(RAYLIB_INSTALL_PATH) -L$(RAYLIB_RELEASE_PATH)
+        LDFLAGS = -L. -L$(RAYLIB_INSTALL_PATH) -L$(RAYLIB_RELEASE_PATH) -L$(RAYLIB_PATH)
     endif
 endif
 
 ifeq ($(PLATFORM),PLATFORM_RPI)
     LDFLAGS += -L/opt/vc/lib
+endif
+
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    LDFLAGS += -lGLESv2 -lEGL -ldrm -lgbm
 endif
 
 # Define any libraries required on linking
@@ -330,7 +357,7 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),OSX)
         # Libraries for OSX 10.9 desktop compiling
         # NOTE: Required packages: libopenal-dev libegl1-mesa-dev
-        LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo 
+        LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
     endif
     ifeq ($(PLATFORM_OS),BSD)
         # Libraries for FreeBSD, OpenBSD, NetBSD, DragonFly desktop compiling
@@ -350,9 +377,14 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
     # NOTE: Required packages: libasound2-dev (ALSA)
     LDLIBS = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # Libraries for DRM compiling
+    # NOTE: Required packages: libasound2-dev (ALSA)
+    LDLIBS = -lraylib -lGLESv2 -lEGL -lpthread -lrt -lm -lgbm -ldrm -ldl
+endif
 ifeq ($(PLATFORM),PLATFORM_WEB)
     # Libraries for web (HTML5) compiling
-    LDLIBS = $(RAYLIB_RELEASE_PATH)/libraylib.bc
+    LDLIBS = $(RAYLIB_RELEASE_PATH)/libraylib.a
 endif
 
 # Define all source files required
@@ -364,6 +396,13 @@ OBJS = $(patsubst %.c, %.o, $(PROJECT_SOURCE_FILES))
 # For Android platform we call a custom Makefile.Android
 ifeq ($(PLATFORM),PLATFORM_ANDROID)
     MAKEFILE_PARAMS = -f Makefile.Android 
+    # For Linux and macOS set make and makefile
+    ifeq ($(PLATFORM_OS),LINUX)
+        MAKEFILE_PARAMS = -f Makefile.Android.linux
+    endif
+    ifeq ($(PLATFORM_OS),OSX)
+        MAKEFILE_PARAMS = -f Makefile.Android.macos
+    endif
     export PROJECT_NAME
     export PROJECT_SOURCE_FILES
 else
@@ -391,7 +430,8 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
 		del *.o *.exe /s
     endif
     ifeq ($(PLATFORM_OS),LINUX)
-	find -type f -executable | xargs file -i | grep -E 'x-object|x-archive|x-sharedlib|x-executable|x-pie-executable' | rev | cut -d ':' -f 2- | rev | xargs rm -fv
+		find . -type f -executable -delete
+		rm -fv *.o
     endif
     ifeq ($(PLATFORM_OS),OSX)
 		find . -type f -perm +ugo+x -delete
@@ -399,6 +439,10 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     endif
 endif
 ifeq ($(PLATFORM),PLATFORM_RPI)
+	find . -type f -executable -delete
+	rm -fv *.o
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
 	find . -type f -executable -delete
 	rm -fv *.o
 endif

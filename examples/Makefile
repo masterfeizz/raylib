@@ -2,7 +2,7 @@
 #
 #   raylib makefile for Desktop platforms, Raspberry Pi, Android and HTML5
 #
-#   Copyright (c) 2013-2020 Ramon Santamaria (@raysan5)
+#   Copyright (c) 2013-2021 Ramon Santamaria (@raysan5)
 #
 #   This software is provided "as-is", without any express or implied warranty. In no event
 #   will the authors be held liable for any damages arising from the use of this software.
@@ -25,8 +25,7 @@
 
 # Define required raylib variables
 PROJECT_NAME       ?= raylib_examples
-RAYLIB_VERSION     ?= 3.0.0
-RAYLIB_API_VERSION ?= 3
+RAYLIB_VERSION     ?= 3.7.0
 RAYLIB_PATH        ?= ..
 
 # Define default options
@@ -96,6 +95,12 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
         PLATFORM_OS=LINUX
     endif
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    UNAMEOS=$(shell uname)
+    ifeq ($(UNAMEOS),Linux)
+        PLATFORM_OS=LINUX
+    endif
+endif
 
 # RAYLIB_PATH adjustment for different platforms.
 # If using GNU make, we can get the full path to the top of the tree. Windows? BSD?
@@ -110,7 +115,10 @@ endif
 # This is not currently used by src/Makefile. Not sure of its origin or usage. Refer to wiki.
 # TODO: update install: target in src/Makefile for RPI, consider relation to LINUX.
 ifeq ($(PLATFORM),PLATFORM_RPI)
-    RAYLIB_PATH       ?= /home/pi/raylib
+    RAYLIB_PATH        ?= /home/pi/raylib
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    RAYLIB_PATH        ?= /home/pi/raylib
 endif
 
 ifeq ($(PLATFORM),PLATFORM_WEB)
@@ -118,8 +126,8 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
     EMSDK_PATH         ?= C:/emsdk
     EMSCRIPTEN_PATH    ?= $(EMSDK_PATH)/upstream/emscripten
     CLANG_PATH          = $(EMSDK_PATH)/upstream/bin
-    PYTHON_PATH         = $(EMSDK_PATH)/python/3.7.4_64bit
-    NODE_PATH           = $(EMSDK_PATH)/node/12.9.1_64bit/bin
+    PYTHON_PATH         = $(EMSDK_PATH)/python/3.7.4-pywin32_64bit
+    NODE_PATH           = $(EMSDK_PATH)/node/12.18.1_64bit/bin
     export PATH         = $(EMSDK_PATH);$(EMSCRIPTEN_PATH);$(CLANG_PATH);$(NODE_PATH);$(PYTHON_PATH);C:\raylib\MinGW\bin:$$(PATH)
 endif
 
@@ -169,12 +177,12 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
     CC = emcc
 endif
 
-# Define default make program: Mingw32-make
-MAKE = mingw32-make
+# Define default make program
+MAKE = make
 
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
-    ifeq ($(PLATFORM_OS),LINUX)
-        MAKE = make
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        MAKE = mingw32-make
     endif
 endif
 
@@ -196,7 +204,7 @@ ifeq ($(BUILD_MODE),DEBUG)
     endif
 else
     ifeq ($(PLATFORM),PLATFORM_WEB)
-        CFLAGS += -O3
+        CFLAGS += -Os
     else
         CFLAGS += -s -O1
     endif
@@ -218,6 +226,9 @@ endif
 ifeq ($(PLATFORM),PLATFORM_RPI)
     CFLAGS += -std=gnu99
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    CFLAGS += -std=gnu99 -DEGL_NO_X11
+endif
 ifeq ($(PLATFORM),PLATFORM_WEB)
     # -Os                        # size optimization
     # -O2                        # optimization level 2, if used, also set --memory-init-file 0
@@ -226,16 +237,16 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
     # -s TOTAL_MEMORY=16777216   # to specify heap memory size (default = 16MB)
     # -s USE_PTHREADS=1          # multithreading support
     # -s WASM=0                  # disable Web Assembly, emitted by default
-    # -s EMTERPRETIFY=1          # enable emscripten code interpreter (very slow)
-    # -s EMTERPRETIFY_ASYNC=1    # support synchronous loops by emterpreter
+    # -s ASYNCIFY                # lets synchronous C/C++ code interact with asynchronous JS
     # -s FORCE_FILESYSTEM=1      # force filesystem to load/save files data
     # -s ASSERTIONS=1            # enable runtime checks for common memory allocation errors (-O1 and above turn it off)
     # --profiling                # include information for code profiling
     # --memory-init-file 0       # to avoid an external memory initialization code file (.mem)
     # --preload-file resources   # specify a resources folder for data compilation
-    CFLAGS += -s USE_GLFW=3 -s FORCE_FILESYSTEM=1 -s ASYNCIFY --preload-file $(dir $<)resources@resources
+    # --source-map-base          # allow debugging in browser with source map
+    CFLAGS += -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -s FORCE_FILESYSTEM=1 $(dir $<)resources@resources
 
-    # NOTE: Simple raylib examples are compiled to be interpreter by emterpreter, that way,
+    # NOTE: Simple raylib examples are compiled to be interpreter with asyncify, that way,
     # we can compile same code for ALL platforms with no change required, but, working on bigger
     # projects, code needs to be refactored to avoid a blocking while() loop, moving Update and Draw
     # logic to a self contained function: UpdateDrawFrame(), check core_basic_window_web.c for reference.
@@ -246,8 +257,8 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
 endif
 
 # Define include paths for required headers
-# NOTE: Several external required libraries (stb and others)
-INCLUDE_PATHS = -I. -I$(RAYLIB_PATH)/src -I$(RAYLIB_PATH)/src/external
+# NOTE: Some external/extras libraries could be required (stb, physac, easings...)
+INCLUDE_PATHS = -I. -I$(RAYLIB_PATH)/src -I$(RAYLIB_PATH)/src/external -I$(RAYLIB_PATH)/src/extras
 
 # Define additional directories containing required header files
 ifeq ($(PLATFORM),PLATFORM_RPI)
@@ -256,15 +267,17 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
     INCLUDE_PATHS += -I/opt/vc/include/interface/vmcs_host/linux
     INCLUDE_PATHS += -I/opt/vc/include/interface/vcos/pthreads
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # DRM required libraries
+    INCLUDE_PATHS += -I/usr/include/libdrm
+endif
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),BSD)
         # Consider -L$(RAYLIB_H_INSTALL_PATH)
         INCLUDE_PATHS += -I/usr/local/include
     endif
     ifeq ($(PLATFORM_OS),LINUX)
-        # Reset everything.
-        # Precedence: immediately local, installed version, raysan5 provided libs -I$(RAYLIB_H_INSTALL_PATH) -I$(RAYLIB_PATH)/release/include
-        INCLUDE_PATHS = -I$(RAYLIB_H_INSTALL_PATH) -isystem. -isystem$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/release/include -isystem$(RAYLIB_PATH)/src/external
+        INCLUDE_PATHS += -I$(RAYLIB_H_INSTALL_PATH)
     endif
 endif
 
@@ -274,7 +287,7 @@ LDFLAGS = -L. -L$(RAYLIB_RELEASE_PATH) -L$(RAYLIB_PATH)/src
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),WINDOWS)
         # resource file contains windows executable icon and properties
-        LDFLAGS += $(RAYLIB_PATH)/src/raylib.rc.data 
+        LDFLAGS += $(RAYLIB_PATH)/src/raylib.rc.data
         # -Wl,--subsystem,windows hides the console window
         ifeq ($(BUILD_MODE), RELEASE)
             LDFLAGS += -Wl,--subsystem,windows
@@ -287,7 +300,7 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),LINUX)
         # Reset everything.
         # Precedence: immediately local, installed version, raysan5 provided libs
-        LDFLAGS = -L. -L$(RAYLIB_INSTALL_PATH) -L$(RAYLIB_RELEASE_PATH)
+        LDFLAGS = -L. -L$(RAYLIB_INSTALL_PATH) -L$(RAYLIB_RELEASE_PATH) -L$(RAYLIB_PATH)
     endif
 endif
 
@@ -327,7 +340,7 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),OSX)
         # Libraries for OSX 10.9 desktop compiling
         # NOTE: Required packages: libopenal-dev libegl1-mesa-dev
-        LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo 
+        LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
     endif
     ifeq ($(PLATFORM_OS),BSD)
         # Libraries for FreeBSD, OpenBSD, NetBSD, DragonFly desktop compiling
@@ -347,9 +360,14 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
     # NOTE: Required packages: libasound2-dev (ALSA)
     LDLIBS = -lraylib -lbrcmGLESv2 -lbrcmEGL -lpthread -lrt -lm -lbcm_host -ldl
 endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
+    # Libraries for DRM compiling
+    # NOTE: Required packages: libasound2-dev (ALSA)
+    LDLIBS = -lraylib -lGLESv2 -lEGL -lpthread -lrt -lm -lgbm -ldrm -ldl
+endif
 ifeq ($(PLATFORM),PLATFORM_WEB)
     # Libraries for web (HTML5) compiling
-    LDLIBS = $(RAYLIB_RELEASE_PATH)/libraylib.bc
+    LDLIBS = $(RAYLIB_RELEASE_PATH)/libraylib.a
 endif
 
 # Define all object files required
@@ -375,7 +393,9 @@ CORE = \
     core/core_scissor_test \
     core/core_storage_values \
     core/core_vr_simulator \
-    core/core_loading_thread
+    core/core_loading_thread \
+    core/core_quat_conversion \
+    core/core_window_flags
 
 SHAPES = \
     shapes/shapes_basic_shapes \
@@ -393,7 +413,7 @@ SHAPES = \
     shapes/shapes_draw_ring \
     shapes/shapes_draw_circle_sector \
     shapes/shapes_draw_rectangle_rounded
-    
+
 TEXTURES = \
     textures/textures_logo_raylib \
     textures/textures_mouse_painting \
@@ -412,8 +432,10 @@ TEXTURES = \
     textures/textures_sprite_button \
     textures/textures_sprite_explosion \
     textures/textures_bunnymark \
-    textures/textures_blend_modes
-    
+    textures/textures_blend_modes \
+    textures/textures_draw_tiled \
+    textures/textures_poly
+
 TEXT = \
     text/text_raylib_fonts \
     text/text_font_spritefont \
@@ -424,8 +446,9 @@ TEXT = \
     text/text_input_box \
     text/text_writing_anim \
     text/text_rectangle_bounds \
-    text/text_unicode
-    
+    text/text_unicode \
+    text/text_draw_3d
+
 MODELS = \
     models/models_animation \
     models/models_billboard \
@@ -443,7 +466,7 @@ MODELS = \
     models/models_yaw_pitch_roll \
     models/models_heightmap \
     models/models_waving_cubes
-    
+
 SHADERS = \
     shaders/shaders_model_shader \
     shaders/shaders_shapes_textures \
@@ -458,15 +481,18 @@ SHADERS = \
     shaders/shaders_basic_lighting \
     shaders/shaders_fog \
     shaders/shaders_simple_mask \
-    shaders/shaders_spotlight
-    
+    shaders/shaders_spotlight \
+    shaders/shaders_hot_reloading \
+    shaders/shaders_mesh_instancing \
+    shaders/shaders_multi_sample2d
+
 AUDIO = \
     audio/audio_module_playing \
     audio/audio_music_stream \
     audio/audio_raw_stream \
     audio/audio_sound_loading \
     audio/audio_multichannel_sound
-    
+
 PHYSICS = \
     physics/physics_demo \
     physics/physics_friction \
@@ -482,8 +508,8 @@ all: $(CORE) $(SHAPES) $(TEXT) $(TEXTURES) $(MODELS) $(SHADERS) $(AUDIO) $(PHYSI
 
 core: $(CORE)
 shapes: $(SHAPES)
-text: $(TEXT)
 textures: $(TEXTURES)
+text: $(TEXT)
 models: $(MODELS)
 shaders: $(SHADERS)
 audio: $(AUDIO)
@@ -514,6 +540,10 @@ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     endif
 endif
 ifeq ($(PLATFORM),PLATFORM_RPI)
+	find . -type f -executable -delete
+	rm -fv *.o
+endif
+ifeq ($(PLATFORM),PLATFORM_DRM)
 	find . -type f -executable -delete
 	rm -fv *.o
 endif
